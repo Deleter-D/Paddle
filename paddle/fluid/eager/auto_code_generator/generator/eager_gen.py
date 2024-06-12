@@ -241,7 +241,8 @@ paddle::small_vector<std::vector<paddle::Tensor>, egr::kSlotSmallVectorSize> {}:
   VLOG(4) << \"Finish AD API GRAD: {}";
   VLOG(6) << "gradnode_ptr = " << this;
   // LOG IF DEBUG
-
+  {}
+  // DUMP IF DEBUG
   {}
   // Return
 {}
@@ -297,6 +298,8 @@ TEST_API {} {}({}) {{
   VLOG(4) << \"Finish AD API: {}";
   // LOG IF DEBUG
   {}
+  // DUMP IF DEBUG
+  {}
   // Returns
   return {};
 }}
@@ -315,6 +318,13 @@ BEFORE_LOG_PRINT_TEMPLATE = """
       const char* INPUT_PRINT_TEMPLATE = \"{{ Input: [%s]}} \";
       {}
       VLOG(3) << paddle::string::Sprintf(INPUT_PRINT_TEMPLATE, input_str);
+  }}
+"""
+
+AFTER_TENSOR_DUMP_TEMPLATE = """
+  if(VLOG_IS_ON(4)){{
+    std::string api_unique = egr::Controller::Instance().GenerateUniqueName(\"{}\");
+      {}
   }}
 """
 
@@ -346,6 +356,8 @@ TEST_API {} {}({}) {{
   // Check Inplace if needed
 {}{}
   // LOG IF DEBUG
+  {}
+  // DUMP IF DEBUG
   {}
   // Returns
   return {};
@@ -422,6 +434,7 @@ NODE_CC_FILE_TEMPLATE = """
 #include "paddle/fluid/eager/api/generated/eager_generated/forwards/dygraph_functions.h"
 #include "paddle/fluid/eager/to_static/run_program_op_node.h"
 #include "paddle/fluid/eager/nan_inf_utils.h"
+#include "paddle/fluid/eager/tensor_dump_utils.h"
 #include "paddle/phi/api/include/sparse_api.h"
 #include "paddle/fluid/eager/api/manual/eager_manual/nodes/nodes.h"
 #include "paddle/fluid/prim/api/composite_backward/composite_backward_api.h"
@@ -456,6 +469,7 @@ FORWARD_CC_FILE_TEMPLATE = """
 #include "paddle/fluid/eager/eager_amp_auto_cast.h"
 #include "paddle/phi/backends/gpu/gpu_info.h"
 #include "paddle/fluid/eager/nan_inf_utils.h"
+#include "paddle/fluid/eager/tensor_dump_utils.h"
 #include "paddle/fluid/eager/api/manual/eager_manual/dygraph_forward_api.h"
 #include "paddle/phi/core/flags.h"
 #include "paddle/phi/api/lib/data_transform.h"
@@ -1890,6 +1904,18 @@ class DygraphForwardFunctionGenerator(DygraphFunctionGeneratorBase):
 
         log_str = AFTER_LOG_PRINT_TEMPLATE.format(var_str)
 
+        # For inputs outputs prepare for dumping
+        dump_str = ""
+        for name, (ttype, pos) in forward_inputs_position_map.items():
+            dump_str += f"\n{indent}  egr::DumpTensorToFile(api_unique, \"{forward_api_name}\", \"Inputs\", \"{name}\", {name});"
+
+        for name, (ttype, pos) in forward_outputs_position_map.items():
+            dump_str += f"\n{indent}  egr::DumpTensorToFile(api_unique, \"{forward_api_name}\", \"Outputs\", \"{name}\", {name});"
+
+        dump_tensor_str = AFTER_TENSOR_DUMP_TEMPLATE.format(
+            forward_api_name, dump_str
+        )
+
         # Generate forward_definition_str and forward_declaration_str
         if self.is_forward_only:
             if len(amp_tensors_vector_list) == 0:
@@ -1916,6 +1942,7 @@ class DygraphForwardFunctionGenerator(DygraphFunctionGeneratorBase):
                     check_inplace_str,
                     bump_inplace_version_str,
                     log_str,
+                    dump_tensor_str,
                     returns_str,
                 )
             )
@@ -1946,6 +1973,7 @@ class DygraphForwardFunctionGenerator(DygraphFunctionGeneratorBase):
                 node_creation_after_call_str,
                 forward_api_name,
                 log_str,
+                dump_tensor_str,
                 returns_str,
             )
 
@@ -2713,6 +2741,35 @@ class DygraphNodeGenerator(DygraphFunctionGeneratorBase):
 
         log_str = AFTER_LOG_PRINT_TEMPLATE.format(var_str)
 
+        # For inputs outputs prepare for dumping
+        dump_str = ""
+        for name, (
+            ttype,
+            fwd_position,
+            grad_api_position,
+        ) in backward_grad_inputs_map.items():
+            new_name = self.TransformToNextGradName(name)
+            dump_str += f"\n{indent}  egr::DumpTensorToFile(api_unique, \"{backward_api_name}\", \"Inputs\", \"{new_name}\", {new_name});"
+
+        for (
+            name,
+            (backward_input_type, is_fwd_input, grad_api_position),
+        ) in backward_forward_inputs_map.items():
+            new_name = self.TransformToNextGradName(name)
+            dump_str += f"\n{indent}  egr::DumpTensorToFile(api_unique, \"{backward_api_name}\", \"Inputs\", \"{new_name}\", {new_name});"
+
+        for name, (
+            ttype,
+            fwd_position,
+            grad_api_position,
+        ) in backward_grad_outputs_map.items():
+            new_name = self.TransformToNextGradName(name)
+            dump_str += f"\n{indent}  egr::DumpTensorToFile(api_unique, \"{backward_api_name}\", \"Outputs\", \"{new_name}\",{new_name});"
+
+        dump_tensor_str = AFTER_TENSOR_DUMP_TEMPLATE.format(
+            backward_api_name, dump_str
+        )
+
         self.node_definition_str = GRAD_FUNCTION_TEMPLATE.format(
             grad_node_name,
             self.backward_api_name,
@@ -2731,6 +2788,7 @@ class DygraphNodeGenerator(DygraphFunctionGeneratorBase):
             next_grad_node_creation_str,
             self.backward_api_name,
             log_str,
+            dump_tensor_str,
             returns_str,
         )
 
