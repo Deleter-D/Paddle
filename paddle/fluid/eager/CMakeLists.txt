@@ -57,7 +57,7 @@ cc_library(
 cc_library(
   eager_tensor_dump_utils
   SRCS tensor_dump_utils.cc
-  DEPS phi_tensor enforce)
+  DEPS phi enforce)
 cc_library(
   grad_node_info
   SRCS grad_node_info.cc
