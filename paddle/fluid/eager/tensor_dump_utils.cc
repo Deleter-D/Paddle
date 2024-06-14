@@ -166,6 +166,8 @@ void TensorDumpVisitor::apply(
   auto* dev_ctx =
       paddle::platform::DeviceContextPool::Instance().Get(tensor.place());
   if (tensor.place() == phi::CPUPlace()) {
+    dev_ctx = static_cast<phi::CPUContext*>(
+        paddle::platform::DeviceContextPool::Instance().Get(tensor.place()));
     phi::TensorToVector(tensor, *dev_ctx, &tensor_data);
   } else {
     dev_ctx = static_cast<paddle::platform::CustomDeviceContext*>(
