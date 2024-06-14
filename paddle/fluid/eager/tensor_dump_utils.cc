@@ -19,6 +19,7 @@
 #include "paddle/phi/api/ext/tensor_compat.h"
 #include "paddle/phi/core/dense_tensor.h"
 #include "paddle/phi/core/selected_rows.h"
+#include "paddle/phi/core/tensor_utils.h"
 
 namespace egr {
 
@@ -116,18 +117,7 @@ void DumpTensorToFile(const std::string& api_unique,
 template <typename T>
 inline std::string GetTensorDesc(const std::string& adr_name,
                                  const phi::DenseTensor& tensor) {
-  std::string dtype_str = paddle::framework::DataTypeToString(
-      paddle::framework::DataTypeTrait<T>::DataType());
-  if (dtype_str == "float") {
-    dtype_str = "fp32";
-  } else if (dtype_str == "double") {
-    dtype_str = "fp64";
-  } else if (dtype_str == "::paddle::platform::float16") {
-    dtype_str = "fp16";
-  } else if (dtype_str == "::paddle::platform::bfloat16") {
-    dtype_str = "bf16";
-  }
-
+  std::string dtype_str = phi::DataTypeToString(tensor.dtype());
   std::stringstream ss;
   ss << "Name: " << adr_name;
   if (tensor.initialized()) {
@@ -140,14 +130,6 @@ inline std::string GetTensorDesc(const std::string& adr_name,
        << ", dtype: " << dtype_str << ", format: " << tensor.layout()
        << ", dims: [" << tensor.dims() << "]";
   }
-
-  if (!tensor.storage_properties_initialized()) {
-    ss << " ==> storage properties not initialized.";
-    return ss.str();
-  }
-  auto npu_properties = tensor.storage_properties<phi::NPUStorageProperties>();
-  ss << ", storage_format: " << npu_properties.storage_format
-     << ", storage_dims: [" << npu_properties.storage_dims << "]";
   return ss.str();
 }
 
@@ -180,21 +162,18 @@ void TensorDumpVisitor::apply(
   auto tensor_desc = GetTensorDesc<T>(adr_name, tensor);
 
   std::vector<T> tensor_data;
-  if (paddle::platform::is_cpu_place(tensor.place())) {
-    paddle::framework::TensorToVector(tensor, &tensor_data);
-  } else if (tensor.storage_properties_initialized()) {
-    paddle::Tensor tensor_in(std::make_shared<phi::DenseTensor>(tensor));
-    auto tensor_out = paddle::npu_identity(tensor_in);
-    auto dense_tensor =
-        std::dynamic_pointer_cast<phi::DenseTensor>(tensor_out.impl());
+
+  auto* dev_ctx =
+      paddle::platform::DeviceContextPool::Instance().Get(tensor.place());
+  if (tensor.place() == phi::CPUPlace()) {
+    phi::TensorToVector(tensor, *dev_ctx, &tensor_data);
+  } else {
+    dev_ctx = static_cast<paddle::platform::CustomDeviceContext*>(
+        paddle::platform::DeviceContextPool::Instance().Get(tensor.place()));
 
     phi::DenseTensor cpu_tensor;
-    paddle::framework::TensorCopy(*dense_tensor, phi::CPUPlace(), &cpu_tensor);
-    paddle::framework::TensorToVector(cpu_tensor, &tensor_data);
-  } else {
-    phi::DenseTensor cpu_tensor;
-    paddle::framework::TensorCopy(tensor, phi::CPUPlace(), &cpu_tensor);
-    paddle::framework::TensorToVector(cpu_tensor, &tensor_data);
+    phi::Copy(dev_ctx, tensor, phi::CPUPlace(), true, &cpu_tensor);
+    phi::TensorToVector(cpu_tensor, *dev_ctx, &tensor_data);
   }
 
   std::string folder_path = "tensor_dump/" + api_unique + "/" + arg_type + "/";
