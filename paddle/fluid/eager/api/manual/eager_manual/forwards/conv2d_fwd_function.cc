@@ -19,6 +19,7 @@
 #include "paddle/fluid/eager/eager_amp_auto_cast.h"
 #include "paddle/fluid/eager/eager_layout_auto_tune.h"
 #include "paddle/fluid/eager/nan_inf_utils.h"
+#include "paddle/fluid/eager/tensor_dump_utils.h"
 #include "paddle/fluid/platform/profiler/event_tracing.h"
 #include "paddle/phi/core/flags.h"
 
@@ -167,6 +168,17 @@ paddle::Tensor conv2d_ad_func(const paddle::Tensor& input,
     }
     grad_node->SetGradInMeta(out, 0);
     // Set TensorWrappers for Forward Outputs if needed
+  }
+
+  // DUMP IF DEBUG
+
+  if (VLOG_IS_ON(4)) {
+    std::string api_unique =
+        egr::Controller::Instance().GenerateUniqueName("conv2d");
+
+    egr::DumpTensorToFile(api_unique, "conv2d", "Inputs", "input", input);
+    egr::DumpTensorToFile(api_unique, "conv2d", "Inputs", "filter", filter);
+    egr::DumpTensorToFile(api_unique, "conv2d", "Outputs", "out", out);
   }
 
   // Returns

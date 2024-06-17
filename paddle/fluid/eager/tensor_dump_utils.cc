@@ -174,7 +174,7 @@ void TensorDumpVisitor::apply(
         paddle::platform::DeviceContextPool::Instance().Get(tensor.place()));
 
     phi::DenseTensor cpu_tensor;
-    phi::Copy(dev_ctx, tensor, phi::CPUPlace(), true, &cpu_tensor);
+    phi::Copy(*dev_ctx, tensor, phi::CPUPlace(), true, &cpu_tensor);
     phi::TensorToVector(cpu_tensor, *dev_ctx, &tensor_data);
   }
 

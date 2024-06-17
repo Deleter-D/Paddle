@@ -15,6 +15,7 @@
 #include "glog/logging.h"
 #include "paddle/fluid/eager/api/utils/global_utils.h"
 #include "paddle/fluid/eager/nan_inf_utils.h"
+#include "paddle/fluid/eager/tensor_dump_utils.h"
 #include "paddle/fluid/eager/to_static/run_program_op_node.h"
 #include "paddle/fluid/eager/utils.h"
 #include "paddle/fluid/framework/op_registry.h"
@@ -197,6 +198,23 @@ Conv2dGradNodeFinal::operator()(
         INPUT_PRINT_TEMPLATE, input_str, output_str);
   }
 
+  // DUMP IF DEBUG
+
+  if (VLOG_IS_ON(4)) {
+    std::string api_unique =
+        egr::Controller::Instance().GenerateUniqueName("conv2d_grad");
+
+    egr::DumpTensorToFile(api_unique, "conv2d_grad", "Inputs", "input", input);
+    egr::DumpTensorToFile(
+        api_unique, "conv2d_grad", "Inputs", "filter", filter);
+    egr::DumpTensorToFile(
+        api_unique, "conv2d_grad", "Inputs", "grad_out", grad_out);
+    egr::DumpTensorToFile(
+        api_unique, "conv2d_grad", "Outputs", "grad_input", grad_input);
+    egr::DumpTensorToFile(
+        api_unique, "conv2d_grad", "Outputs", "grad_filter", grad_filter);
+  }
+
   // Return
   if (NeedComplexToRealConversion()) HandleComplexGradToRealGrad(&returns);
   return returns;
@@ -371,6 +389,33 @@ Conv2dDoubleGradNodeFinal::operator()(
     VLOG(6) << "gradnode_ptr = " << this;
     VLOG(4) << paddle::string::Sprintf(
         INPUT_PRINT_TEMPLATE, input_str, output_str);
+  }
+
+  if (VLOG_IS_ON(4)) {
+    std::string api_unique =
+        egr::Controller::Instance().GenerateUniqueName("conv2d_double_grad");
+
+    egr::DumpTensorToFile(api_unique, "conv2d_double_grad", "Inputs", "input", input);
+    egr::DumpTensorToFile(
+        api_unique, "conv2d_double_grad", "Inputs", "filter", filter);
+    egr::DumpTensorToFile(
+        api_unique, "conv2d_double_grad", "Inputs", "grad_out", grad_out);
+    egr::DumpTensorToFile(api_unique,
+                          "conv2d_double_grad",
+                          "Outputs",
+                          "grad_input_grad",
+                          grad_input_grad);
+    egr::DumpTensorToFile(api_unique,
+                          "conv2d_double_grad",
+                          "Outputs",
+                          "grad_filter_grad",
+                          grad_filter_grad);
+    egr::DumpTensorToFile(
+        api_unique, "conv2d_double_grad", "Outputs", "input_grad", input_grad);
+    egr::DumpTensorToFile(
+        api_unique, "conv2d_double_grad", "Outputs", "filter_grad", filter_grad);
+    egr::DumpTensorToFile(
+        api_unique, "conv2d_double_grad", "Outputs", "grad_out_grad", grad_out_grad);
   }
 
   // Return
