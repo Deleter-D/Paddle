@@ -49,7 +49,7 @@ class TestLogSoftmaxOp(OpTest):
         self.prim_op_type = "comp"
         self.python_api = F.log_softmax
         self.public_python_api = F.log_softmax
-        self.dtype = 'float64'
+        self.dtype = 'float32'
         self.shape = [2, 3, 4, 5]
         self.axis = -1
         self.set_attrs()
@@ -80,7 +80,7 @@ class TestLogSoftmaxOp_ZeroDim(TestLogSoftmaxOp):
         self.prim_op_type = "comp"
         self.python_api = F.log_softmax
         self.public_python_api = F.log_softmax
-        self.dtype = 'float64'
+        self.dtype = 'float32'
 
         x = np.random.uniform(0.1, 1.0, []).astype(self.dtype)
         out = np.array(0.0).astype(self.dtype)
@@ -130,6 +130,63 @@ class TestLogSoftmaxAxisFP16OP(TestLogSoftmaxFP16OP):
 
 
 @unittest.skipIf(
+    core.is_compiled_with_rocm(), "miopen doesn't support double in softmax op."
+)
+class TestLogSoftmaxFP64OP(TestLogSoftmaxOp):
+    def set_attrs(self):
+        self.dtype = np.float64
+
+    def test_check_output(self):
+        self.check_output(check_pir=True, check_prim_pir=True)
+
+    def test_check_grad(self):
+        self.check_grad(['X'], ['Out'], check_pir=True)
+
+
+@unittest.skipIf(
+    core.is_compiled_with_rocm(), "miopen doesn't support double in softmax op."
+)
+class TestLogSoftmaxFP64Op_ZeroDim(TestLogSoftmaxOp):
+    def setUp(self):
+        self.op_type = 'log_softmax'
+        self.prim_op_type = "comp"
+        self.python_api = F.log_softmax
+        self.public_python_api = F.log_softmax
+        self.dtype = 'float64'
+
+        x = np.random.uniform(0.1, 1.0, []).astype(self.dtype)
+        out = np.array(0.0).astype(self.dtype)
+
+        self.inputs = {'X': x}
+        self.outputs = {'Out': out}
+        self.attrs = {'axis': -1}
+
+    def test_check_output(self):
+        self.check_output(check_pir=True, check_prim_pir=True)
+
+    def test_check_grad(self):
+        self.check_grad(['X'], ['Out'], check_pir=True)
+
+
+@unittest.skipIf(
+    core.is_compiled_with_rocm(), "miopen doesn't support double in softmax op."
+)
+class TestLogSoftmaxShapeFP64OP(TestLogSoftmaxFP64OP):
+    def set_attrs(self):
+        self.dtype = np.float64
+        self.shape = [12, 10]
+
+
+@unittest.skipIf(
+    core.is_compiled_with_rocm(), "miopen doesn't support double in softmax op."
+)
+class TestLogSoftmaxAxisFP64OP(TestLogSoftmaxFP64OP):
+    def set_attrs(self):
+        self.dtype = np.float64
+        self.axis = 1
+
+
+@unittest.skipIf(
     not core.is_compiled_with_cuda(), "core is not compiled with CUDA"
 )
 class TestLogSoftmaxBF16Op(OpTest):
@@ -169,6 +226,33 @@ class TestLogSoftmaxLargeDimFP16OP(TestLogSoftmaxOp):
     def set_attrs(self):
         self.dtype = np.float16
         self.shape = [16, 100000]
+
+
+class TestLogSoftmaxLargeDimFP16OP(OpTest):
+    def setUp(self):
+        self.op_type = 'log_softmax'
+        self.prim_op_type = "comp"
+        self.python_api = F.log_softmax
+        self.public_python_api = F.log_softmax
+        self.dtype = np.float16
+        self.shape = [16, 100000]
+        self.axis = -1
+
+        x = np.random.uniform(0.1, 1.0, self.shape).astype(self.dtype)
+        out = np.apply_along_axis(ref_log_softmax, self.axis, x)
+        self.x_grad = ref_log_softmax_grad(x, self.axis)
+
+        self.inputs = {'X': x}
+        self.outputs = {'Out': out}
+        self.attrs = {'axis': self.axis}
+
+    def test_check_output(self):
+        self.check_output(check_pir=True, check_prim_pir=True)
+
+    def test_check_grad(self):
+        self.check_grad(
+            ['X'], ['Out'], user_defined_grads=[self.x_grad], check_pir=True
+        )
 
 
 class TestNNLogSoftmaxAPI(unittest.TestCase):
@@ -240,7 +324,7 @@ class TestNNFunctionalLogSoftmaxAPI(unittest.TestCase):
     def test_check_api(self):
         for axis in [-1, 1]:
             self.check_api(axis)
-        self.check_api(-1, 'float64')
+        self.check_api(-1, 'float32')
 
     @test_with_pir_api
     def test_errors(self):
